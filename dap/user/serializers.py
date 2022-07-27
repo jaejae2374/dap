@@ -56,7 +56,10 @@ class UserLoginSerializer(serializers.Serializer):
         update_last_login(None, user)
         
         token, _ = Token.objects.get_or_create(user=user)
-        return token.key
+        return {
+            'user': user,
+            'token': token.key
+        }
 
 
 class UserRetrieveSerializer(serializers.ModelSerializer):

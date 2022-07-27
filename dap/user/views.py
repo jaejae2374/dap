@@ -1,4 +1,3 @@
-from http.client import ResponseNotReady
 from django.contrib.auth import login, logout
 from rest_framework import status, permissions, viewsets
 from rest_framework.response import Response
@@ -93,8 +92,17 @@ class UserView(viewsets.GenericViewSet):
     def login(self, request):
         """User Login."""
         serializer = self.get_serializer(data=request.data)
-        token = serializer.is_valid(raise_exception=True)
-
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        token = serializer.validated_data['token']
         return Response({'success': True, 'token': token}, status=status.HTTP_200_OK)
+
+    @action(methods=['GET'], detail=False)
+    def logout(self, request):
+        """User Logout."""
+        request.user.auth_token.delete()
+        logout(request)
+
+        return Response(status=status.HTTP_200_OK)
 
 
