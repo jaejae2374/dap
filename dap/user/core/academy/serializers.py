@@ -1,60 +1,11 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from user.core.academy.models import Academy, AcademyLocation, AcademyLocationImage
+from user.core.academy.models import Academy
 from dap.const import TIME_FORMAT
 from dap.errors import FieldError, DuplicationError
+from util.location.serializers import LocationSerializer
 
 User = get_user_model()
-
-class AcademyLocationImageSerializer(serializers.ModelSerializer):
-    class Meta: 
-        model = AcademyLocationImage
-        fields = (
-            'id',
-            'image'
-        )
-
-class AcademyLocationSerializer(serializers.ModelSerializer):
-    images = serializers.SerializerMethodField()
-
-    class Meta:
-        model = AcademyLocation
-        fields = (
-            'id',
-            'detail',
-            'city',
-            'district',
-            'description',
-            'images'
-        )
-        extra_kwargs = {
-            'detail': {'required': True}
-        }
-
-    def create(self, validated_data: dict) -> AcademyLocation:
-        # TODO: parsing detail to city, district method.
-        academy_location = AcademyLocation.objects.create(
-            detail = validated_data['detail'],
-            city = validated_data.get('city'),
-            district = validated_data.get('district'),
-            description = validated_data.get('description')
-        )
-        if self.context.get('images'):
-            AcademyLocationImage.objects.bulk_create(
-                [
-                    AcademyLocationImage(
-                        location=academy_location,
-                        name=self.context['name'],
-                        image=image
-                    ) for image in self.context['images']
-                ]
-            )
-        return academy_location
-
-    def get_images(self, academy_location: AcademyLocation):
-        if academy_location.images:
-            return AcademyLocationImageSerializer(academy_location.images, many=True).data
-        return None
 
     
 class AcademySerializer(serializers.ModelSerializer):
@@ -83,15 +34,16 @@ class AcademySerializer(serializers.ModelSerializer):
 
     def create(self, validated_data: dict) -> Academy:
         location = self.context['location']
-        als = AcademyLocationSerializer(
+        location['type'] = "academy"
+        ls = LocationSerializer(
             data=location, 
             context={
                 'images': location.get('images'),
                 'name': validated_data['name']
             }
         )
-        als.is_valid(raise_exception=True)
-        location_ = als.save()
+        ls.is_valid(raise_exception=True)
+        location_ = ls.save()
         academy = Academy.objects.create(
             **validated_data,
             location=location_)
@@ -111,7 +63,7 @@ class AcademySerializer(serializers.ModelSerializer):
         return data
 
     def get_location(self, academy):
-        return AcademyLocationSerializer(academy.location).data
+        return LocationSerializer(academy.location).data
 
 
 class AcademyListSerializer(serializers.ModelSerializer):

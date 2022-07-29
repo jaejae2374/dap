@@ -21,7 +21,6 @@ class AcademyViewSet(viewsets.GenericViewSet):
 
     def list(self, request):
         """List academy."""
-        # TODO: add location keyword search.
         name = request.query_params.get("name")
         location = request.query_params.get("location")
         if name:

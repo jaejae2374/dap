@@ -5,13 +5,14 @@ from user.serializers import UserCreateSerializer, UserLoginSerializer, UserRetr
 from user.profile.serializers import MentorSerializer, MenteeSerializer
 from dap.errors import FieldError, NotFound
 from user.core.genre.const import DEFAULT
+from user.profile.models import Mentor
 from rest_framework.decorators import action
 from user.profile.utils import profile_update
 from django.contrib.auth import get_user_model
 User = get_user_model()
 
 
-class UserView(viewsets.GenericViewSet):
+class UserViewSet(viewsets.GenericViewSet):
     """User API View."""
     # TODO: permission details.
     permission_classes = (permissions.AllowAny,)
@@ -104,5 +105,29 @@ class UserView(viewsets.GenericViewSet):
         logout(request)
 
         return Response(status=status.HTTP_200_OK)
+
+    @action(methods=['GET'], detail=False)
+    def mentor(self, request):
+        """Mentor List/Search"""
+        name = request.query_params.get('name')
+        genre = request.query_params.get('genre')
+        academy = request.query_params.get('academy')
+
+        mentors = User.objects.filter(mentee=None)
+        if name: 
+            mentors = mentors.filter(username__icontains=name)
+        if genre:
+            mentors = mentors.filter(mentor__genre__name=genre)
+        if academy:
+            mentors = mentors.filter(mentor__academy__name__icontains=academy)
+        if not (name or genre or academy):
+            mentors = []
+
+        results = mentors.order_by('username').values_list('id', 'username')
+        return Response(results, status=status.HTTP_200_OK)
+            
+
+        
+
 
 
