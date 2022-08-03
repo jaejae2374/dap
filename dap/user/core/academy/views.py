@@ -13,7 +13,10 @@ class AcademyViewSet(viewsets.GenericViewSet):
         data = request.data
         serializer = self.get_serializer(
             data=data,
-            context={'location': data.get('location')})
+            context={
+                'location': data.get('location'),
+                'genres': data.get('genres'),
+                'mentors': data.get('mentors')})
         serializer.is_valid(raise_exception=True)
         academy = serializer.save()
         # TODO: response serializer? too heavy?

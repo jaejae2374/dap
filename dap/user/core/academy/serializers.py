@@ -72,6 +72,7 @@ class AcademyListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Academy
         fields = (
+            'id',
             'name',
             'location',
             'logo',

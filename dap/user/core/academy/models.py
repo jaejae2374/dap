@@ -13,7 +13,7 @@ class Academy(models.Model):
         finished_at (DateTime): academy's end time.
         logo (Image): academy's representative image, logo.
         url (str): academy's website url.
-        location (AcademyLocation): academy's location model.
+        location (Location): academy's location model.
     """
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=30)
