@@ -2,12 +2,15 @@ from rest_framework import status, viewsets, permissions
 from user.core.academy.models import Academy
 from user.core.academy.serializers import AcademySerializer, AcademyListSerializer
 from rest_framework.response import Response
+from django.core.paginator import Paginator
+from django.db import transaction
 
 class AcademyViewSet(viewsets.GenericViewSet):
     queryset = Academy.objects.all()
     serializer_class = AcademySerializer
     permission_classes = [permissions.AllowAny]
 
+    @transaction.atomic()
     def create(self, request):
         """Create academy."""
         data = request.data
@@ -24,6 +27,7 @@ class AcademyViewSet(viewsets.GenericViewSet):
 
     def list(self, request):
         """List academy."""
+        page = request.query_params.get('page', '1')
         name = request.query_params.get("name")
         location = request.query_params.get("location")
         if name:
@@ -32,4 +36,5 @@ class AcademyViewSet(viewsets.GenericViewSet):
             results = Academy.objects.filter(location__detail__icontains=location).order_by('name')
         else: 
             results = []
+        results = Paginator(results, 20).get_page(page)
         return Response(AcademyListSerializer(results, many=True).data, status=status.HTTP_200_OK)

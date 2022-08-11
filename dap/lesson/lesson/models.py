@@ -31,4 +31,7 @@ class Lesson(models.Model):
     recruit_number = models.PositiveSmallIntegerField(default=0)
     genre = models.ManyToManyField(Genre, related_name="lessons")
     location = models.OneToOneField(Location, on_delete=models.CASCADE, null=True)
+    mentee = models.ManyToManyField(User, related_name="classes")
 
+    class Meta:
+        ordering = ['-started_at']

@@ -10,7 +10,8 @@ from rest_framework.decorators import action
 from user.profile.utils import profile_update
 from django.contrib.auth import get_user_model
 User = get_user_model()
-
+from django.core.paginator import Paginator
+from django.db import transaction
 
 class UserViewSet(viewsets.GenericViewSet):
     """User API View."""
@@ -28,6 +29,7 @@ class UserViewSet(viewsets.GenericViewSet):
         elif self.action == "update":
             return UserUpdateSerializer
 
+    @transaction.atomic()
     def create(self, request):
         """Create User."""
         data = request.data
@@ -60,7 +62,7 @@ class UserViewSet(viewsets.GenericViewSet):
 
         return Response({'user': user.id, 'token': token}, status=status.HTTP_201_CREATED)
 
-
+    @transaction.atomic()
     def update(self, request, pk=None):
         """Update User."""
         try:
@@ -109,6 +111,7 @@ class UserViewSet(viewsets.GenericViewSet):
     @action(methods=['GET'], detail=False)
     def mentor(self, request):
         """Mentor List/Search"""
+        page = request.query_params.get('page', '1')
         name = request.query_params.get('name')
         genre = request.query_params.get('genre')
         academy = request.query_params.get('academy')
@@ -124,6 +127,7 @@ class UserViewSet(viewsets.GenericViewSet):
             mentors = []
 
         results = mentors.order_by('username').values_list('id', 'username')
+        results = Paginator(results, 20).get_page(page)
         return Response(results, status=status.HTTP_200_OK)
             
 

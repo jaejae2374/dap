@@ -4,6 +4,7 @@ from user.core.academy.models import Academy
 from dap.const import TIME_FORMAT
 from dap.errors import FieldError, DuplicationError
 from util.location.serializers import LocationSerializer
+from util.location.utils import set_location
 
 User = get_user_model()
 
@@ -33,20 +34,10 @@ class AcademySerializer(serializers.ModelSerializer):
         }
 
     def create(self, validated_data: dict) -> Academy:
-        location = self.context['location']
-        location['type'] = "academy"
-        ls = LocationSerializer(
-            data=location, 
-            context={
-                'images': location.get('images'),
-                'name': validated_data['name']
-            }
-        )
-        ls.is_valid(raise_exception=True)
-        location_ = ls.save()
+        location = set_location(data=self.context, type="academy", name=validated_data['name'])
         academy = Academy.objects.create(
             **validated_data,
-            location=location_)
+            location=location)
         return academy
     
     def validate(self, data: dict) -> dict:

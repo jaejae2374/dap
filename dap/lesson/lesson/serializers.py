@@ -1,9 +1,9 @@
 from rest_framework import serializers
 from user.serializers import UserRetrieveSerializer
-from user.core.academy.serializers import AcademySerializer
 from lesson.lesson.models import Lesson
 from util.location.serializers import LocationSerializer
 from dap.errors import FieldError
+from util.location.utils import set_location
 
 class LessonCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,18 +26,8 @@ class LessonCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data: dict) -> Lesson:
         lesson = Lesson.objects.create(**validated_data)
-        location = self.context['location']
-        location['type'] = "lesson"
-        ls = LocationSerializer(
-            data=location, 
-            context={
-                'images': location.get('images'),
-                'name': str(lesson.id)
-            }
-        )
-        ls.is_valid(raise_exception=True)
-        location_ = ls.save()
-        lesson.location = location_
+        location = set_location(data=self.context, type="lesson", name=str(lesson.id))
+        lesson.location = location
         lesson.save()
         lesson.genre.set(self.context['genres'])
         lesson.mentor.set(self.context['mentors'])
@@ -133,3 +123,44 @@ class LessonRetrieveSerializer(serializers.ModelSerializer):
 
     def get_mentors(self, lesson):
         return UserRetrieveSerializer(lesson.mentor.all(), many=True).data
+
+
+class LessonSearchSerializer(serializers.ModelSerializer):
+    mentors = serializers.SerializerMethodField()
+    academy = serializers.CharField(source="academy.name")
+    class Meta:
+        model = Lesson
+        fields = (
+            'id',
+            'title',
+            'started_at',
+            'finished_at',
+            'mentors',
+            'academy',
+        )
+    def get_mentors(self, lesson):
+        return lesson.mentor.all().values_list('id', 'username')
+
+
+class LessonUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Lesson
+        fields = (
+            'title',
+            'description',
+            'started_at',
+            'finished_at',
+            'academy',
+            'price',
+            'recruit_number',
+            'location'
+        )
+    def validate(self, data: dict) -> dict:
+        if data.get('started_at') and data.get('finished_at'):
+            if data['started_at'] >= data['finished_at']:
+                raise FieldError("finished_at should be later than started_at.")
+        if data.get('price', 0) < 0:
+            raise FieldError("price should be positive.")
+        if data.get('recruit_number', 0) < 0:
+            raise FieldError("recruit_number should be positive.")
+        return data

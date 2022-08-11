@@ -2,12 +2,14 @@ from rest_framework import status, viewsets, permissions, generics
 from user.core.genre.models import Genre
 from user.core.genre.serializers import GenreSerializer
 from rest_framework.response import Response
+from django.db import transaction
 
 class GenreViewSet(viewsets.GenericViewSet, generics.RetrieveUpdateDestroyAPIView):
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
     permission_classes = [permissions.AllowAny]
 
+    @transaction.atomic()
     def create(self, request):
         """Create genre."""
         serializer = self.get_serializer(data=request.data)
