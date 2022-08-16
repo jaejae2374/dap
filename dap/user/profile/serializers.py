@@ -41,7 +41,7 @@ class MentorSerializer(serializers.ModelSerializer):
         return data
 
     def get_genre(self, mentor):
-        return mentor.genre.all().values_list('name', flat=True)
+        return mentor.genre.values_list('name', flat=True)
 
     def get_academy(self, mentor):
         return AcademySerializer(mentor.academy.all(), many=True).data
@@ -76,11 +76,12 @@ class MenteeSerializer(serializers.ModelSerializer):
     
     def validate(self, data: dict) -> dict:
         if not self.context.get('genres'):
-            raise serializers.ValidationError("genres required.")
+            raise FieldError("genres required.")
         return data
 
     def get_genre(self, mentee):
-        return mentee.genre.all().values_list('name', flat=True)
+        return mentee.genre.values_list('name', flat=True)
+
 
 class MentorUpdateSerializer(serializers.ModelSerializer):
     class Meta:

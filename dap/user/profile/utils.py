@@ -20,14 +20,14 @@ def profile_update(user: User, profile: str, data: dict) -> None:
             new_academies = list(set(updated_profile.academy.filter(id__in=add_academies))^set(add_academies))
             updated_profile.academy.add(*new_academies)
         mus = MentorUpdateSerializer(updated_profile, data=data, partial=True)
-        mus.is_valid()
+        mus.is_valid(raise_exception=True)
         mus.save()
     else:
         updated_profile = user.mentee
         if not updated_profile:
             raise NotAllowed("you are not Mentee.")
         mus = MenteeUpdateSerializer(updated_profile, data=data, partial=True)
-        mus.is_valid()
+        mus.is_valid(raise_exception=True)
         mus.save()
 
     delete_genres = data.get('genre_delete', None)
@@ -41,6 +41,5 @@ def profile_update(user: User, profile: str, data: dict) -> None:
         add_genres = list(set(add_genres))
         new_genres = list(set(updated_profile.genre.filter(id__in=add_genres))^set(add_genres))
         updated_profile.genre.add(*new_genres)
-    
     
     updated_profile.save()

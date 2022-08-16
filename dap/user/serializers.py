@@ -4,6 +4,7 @@ from django.contrib.auth.models import update_last_login
 from rest_framework.authtoken.models import Token
 from dap.errors import AuthentificationFailed
 from user.profile.serializers import MentorSerializer, MenteeSerializer
+from dap.errors import FieldError
 User = get_user_model()
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -36,7 +37,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def validate_gender(self, value: str) -> str:
         value = value.lower()
         if value not in ['male', 'female']:
-            raise serializers.ValidationError("wrong gender.")
+            raise FieldError("wrong gender. [male, female]")
         return value
 
 
@@ -119,7 +120,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     def validate_gender(self, value: str) -> str:
         value = value.lower()
         if value not in ['male', 'female']:
-            raise serializers.ValidationError("wrong gender.")
+            raise FieldError("wrong gender. [male, female]")
         return value
 
     def get_mentor(self, user):
@@ -131,3 +132,22 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         if user.mentee:
             return MenteeSerializer(user.mentee).data
         return None
+
+class MentorSearchSerializer(serializers.ModelSerializer):
+    academy = serializers.SerializerMethodField()
+    genre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            'id',
+            'username',
+            'academy',
+            'genre'
+        )
+
+    def get_genre(self, user):
+        return list(user.mentor.genre.values_list('name', flat=True))
+
+    def get_academy(self, user):
+        return list(user.mentor.academy.values_list('name', flat=True))

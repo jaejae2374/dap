@@ -33,13 +33,12 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     def create(self, request):
         # TODO: custom permission such as MentorOnly
         if not request.user.mentor:
-            raise NotAllowed("only mentor can create lesson.")
+            raise NotAllowed("Only mentor can create lesson.")
         data = request.data
         serializer = self.get_serializer(
             data=data,
             context={
                 'location': data.get('location'),
-                'genres': data.get('genres'),
                 'mentors': data.get('mentors')
             }
         )
@@ -49,6 +48,7 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
 
     @transaction.atomic()
     def update(self, request, pk=None):
+        # TODO: Only the lesson mentor can update it.
         try:
             data = request.data
             mentors = data.get("mentors")
@@ -73,6 +73,7 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
         return super().retrieve(request, pk)
 
     def delete(self, request, pk=None):
+        # TODO: Only the lesson mentor can update it.
         return super().delete(request, pk)
 
     def list(self, request):
@@ -146,20 +147,24 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     def participate(self, request, pk=None):
         # TODO: 결제 기능 연동
         user = request.user
-        now = datetime.now().replace(tzinfo=utc)
+        if not user.mentee:
+            raise NotAllowed("Only mentee can participate lesson.")
+        now = datetime.now()
         try:
             lesson = Lesson.objects.get(pk=pk)
-            if not (lesson.recruit_number > 0):
-                raise FieldError("Lesson overcrowded.")
             if user.classes.filter(id=pk).exists():
                 raise DuplicationError("Already participated.")
             if lesson.started_at <= now:
                 raise FieldError("Lesson overdue.")
+            if not (lesson.recruit_number > 0):
+                raise FieldError("Lesson overcrowded.")
         except Lesson.DoesNotExist:
             raise NotFound("Lesson does not exist.")
         lesson.recruit_number-=1
         lesson.mentee.add(user)
         lesson.save()
+        user.mentee.courses_count+=1
+        user.mentee.save()
         return Response(self.get_serializer(lesson).data, status=status.HTTP_200_OK)
 
     @action(methods=["GET"], detail=False)
@@ -185,12 +190,12 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
 
     @action(methods=["PUT"], detail=True)
     def cancel(self, request, pk=None):
-        std = (datetime.now() + timedelta(minutes=30)).replace(tzinfo=utc)
+        std = (datetime.now() + timedelta(minutes=30))
         user = request.user
+        if not user.mentee:
+            raise NotAllowed("Only mentee can cancel lesson.")
         try:
             lesson = Lesson.objects.get(pk=pk)
-            if lesson.recruit_number <= 0:
-                raise FieldError("recruit number is already 0.")
             if not user.classes.filter(id=pk).exists():
                 raise NotFound("Not participated.")
             if lesson.started_at <= std:
@@ -200,4 +205,6 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
         lesson.mentee.remove(user)
         lesson.recruit_number+=1
         lesson.save()
+        user.mentee.courses_count-=1
+        user.mentee.save()
         return Response("Successfully Canceled.", status=status.HTTP_200_OK)

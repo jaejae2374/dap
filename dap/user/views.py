@@ -1,19 +1,17 @@
 from django.contrib.auth import login, logout
-from rest_framework import status, permissions, viewsets
+from rest_framework import status, permissions, viewsets, generics
 from rest_framework.response import Response
-from user.serializers import UserCreateSerializer, UserLoginSerializer, UserRetrieveSerializer, UserUpdateSerializer
+from user.serializers import UserCreateSerializer, UserLoginSerializer, UserRetrieveSerializer, UserUpdateSerializer, MentorSearchSerializer
 from user.profile.serializers import MentorSerializer, MenteeSerializer
 from dap.errors import FieldError, NotFound
-from user.core.genre.const import DEFAULT
-from user.profile.models import Mentor
 from rest_framework.decorators import action
 from user.profile.utils import profile_update
 from django.contrib.auth import get_user_model
-User = get_user_model()
 from django.core.paginator import Paginator
 from django.db import transaction
+User = get_user_model()
 
-class UserViewSet(viewsets.GenericViewSet):
+class UserViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     """User API View."""
     # TODO: permission details.
     permission_classes = (permissions.AllowAny,)
@@ -28,6 +26,8 @@ class UserViewSet(viewsets.GenericViewSet):
             return UserLoginSerializer
         elif self.action == "update":
             return UserUpdateSerializer
+        elif self.action == "mentor":
+            return MentorSearchSerializer
 
     @transaction.atomic()
     def create(self, request):
@@ -39,7 +39,7 @@ class UserViewSet(viewsets.GenericViewSet):
                 data=mentor_data, 
                 context={
                     'academies': mentor_data.get('academies'),
-                    'genres': mentor_data.get('genres', [DEFAULT])
+                    'genres': mentor_data.get('genres')
                 })
             profile_name = 'mentor'
         elif data.get('mentee'):
@@ -47,7 +47,7 @@ class UserViewSet(viewsets.GenericViewSet):
             ms = MenteeSerializer(
                 data=mentee_data,
                 context={
-                    'genres': mentee_data.get('genres', [DEFAULT])
+                    'genres': mentee_data.get('genres')
                 })
             profile_name = 'mentee'
         else: 
@@ -84,12 +84,11 @@ class UserViewSet(viewsets.GenericViewSet):
     
     def retrieve(self, request, pk=None):
         """Retrieve User."""
-        try:
-            user = User.objects.get(pk=pk)
-        except User.DoesNotExist:
-            raise NotFound("User does not exist.")
-        return Response(self.get_serializer(user).data, status=status.HTTP_200_OK)
+        return super().retrieve(request, pk)
 
+    def delete(self, request, pk=None):
+        """Retrieve User."""
+        return super().delete(request, pk)
 
     @action(methods=['PUT'], detail=False)
     def login(self, request):
@@ -105,7 +104,6 @@ class UserViewSet(viewsets.GenericViewSet):
         """User Logout."""
         request.user.auth_token.delete()
         logout(request)
-
         return Response(status=status.HTTP_200_OK)
 
     @action(methods=['GET'], detail=False)
@@ -113,22 +111,22 @@ class UserViewSet(viewsets.GenericViewSet):
         """Mentor List/Search"""
         page = request.query_params.get('page', '1')
         name = request.query_params.get('name')
-        genre = request.query_params.get('genre')
+        genre = request.query_params.getlist('genre')
         academy = request.query_params.get('academy')
 
         mentors = User.objects.filter(mentee=None)
         if name: 
             mentors = mentors.filter(username__icontains=name)
         if genre:
-            mentors = mentors.filter(mentor__genre__name=genre)
+            mentors = mentors.filter(mentor__genre__name__in=genre)
         if academy:
             mentors = mentors.filter(mentor__academy__name__icontains=academy)
         if not (name or genre or academy):
             mentors = []
 
-        results = mentors.order_by('username').values_list('id', 'username')
+        results = self.get_serializer(mentors.order_by('username'), many=True).data
         results = Paginator(results, 20).get_page(page)
-        return Response(results, status=status.HTTP_200_OK)
+        return Response(list(results), status=status.HTTP_200_OK)
             
 
         

@@ -15,7 +15,8 @@ class LessonCreateSerializer(serializers.ModelSerializer):
             'finished_at',
             'academy',
             'price',
-            'recruit_number'
+            'recruit_number',
+            'genre'
         )
         extra_kwargs = {
             'started_at': {'input_formats': ['%Y-%m-%dT%H:%M']},
@@ -29,7 +30,6 @@ class LessonCreateSerializer(serializers.ModelSerializer):
         location = set_location(data=self.context, type="lesson", name=str(lesson.id))
         lesson.location = location
         lesson.save()
-        lesson.genre.set(self.context['genres'])
         lesson.mentor.set(self.context['mentors'])
         return lesson
 
@@ -38,8 +38,8 @@ class LessonCreateSerializer(serializers.ModelSerializer):
             raise FieldError("location required.")
         if not self.context.get('mentors'):
             raise FieldError("mentors required.")
-        if not self.context.get('genres'):
-            raise FieldError("genres required.")
+        if not data.get('genre'):
+            raise FieldError("genre required.")
         if data.get('started_at') and data.get('finished_at'):
             if data['started_at'] >= data['finished_at']:
                 raise FieldError("finished_at should be later than started_at.")
@@ -47,12 +47,11 @@ class LessonCreateSerializer(serializers.ModelSerializer):
             raise FieldError("price should be positive.")
         if data.get('recruit_number', 0) < 0:
             raise FieldError("recruit_number should be positive.")
-
         return data
 
 class LessonListSerializer(serializers.ModelSerializer):
     mentors = serializers.SerializerMethodField()
-    genres = serializers.SerializerMethodField()
+    genre = serializers.CharField(source="genre.name")
     academy = serializers.CharField(source="academy.name")
     location = serializers.CharField(source="location.detail")
 
@@ -67,7 +66,7 @@ class LessonListSerializer(serializers.ModelSerializer):
             'recruit_number',
             'mentors',
             'academy',
-            'genres',
+            'genre',
             'location'
         )
         extra_kwargs = {
@@ -75,16 +74,13 @@ class LessonListSerializer(serializers.ModelSerializer):
             'finished_at': {'format': '%Y-%m-%dT%H:%M'}
         }
 
-    def get_genres(self, lesson):
-        return lesson.genre.all().values_list('name', flat=True)
-
     def get_mentors(self, lesson):
         return lesson.mentor.all().values_list('id', 'username')
 
 class LessonRetrieveSerializer(serializers.ModelSerializer):
     mentors = serializers.SerializerMethodField()
     academy = serializers.SerializerMethodField()
-    genres = serializers.SerializerMethodField()
+    genre = serializers.CharField(source="genre.name")
     location = serializers.SerializerMethodField()
 
     class Meta:
@@ -98,7 +94,7 @@ class LessonRetrieveSerializer(serializers.ModelSerializer):
             'recruit_number',
             'mentors',
             'academy',
-            'genres',
+            'genre',
             'location'
         )
         extra_kwargs = {
@@ -114,9 +110,6 @@ class LessonRetrieveSerializer(serializers.ModelSerializer):
             'name': academy.name,
             'contact': academy.contact
         }
-
-    def get_genres(self, lesson):
-        return lesson.genre.all().values_list('name', flat=True)
 
     def get_location(self, lesson):
         return LocationSerializer(lesson.location).data

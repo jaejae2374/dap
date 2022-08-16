@@ -17,7 +17,7 @@ class Lesson(models.Model):
         price (PositiveInt): lesson's price.
         mentor (User): lesson's mentors.
         recruit_number (PositiveSmallInt): lesson's recruit number.
-        genre (Genre): lesson's genres.
+        genre (Genre): lesson's genre.
         location (Location): lesson's location.
     """
     id = models.AutoField(primary_key=True)
@@ -29,7 +29,7 @@ class Lesson(models.Model):
     price = models.PositiveIntegerField(default=0)
     mentor = models.ManyToManyField(User, related_name="lessons")
     recruit_number = models.PositiveSmallIntegerField(default=0)
-    genre = models.ManyToManyField(Genre, related_name="lessons")
+    genre = models.ForeignKey(Genre, on_delete=models.PROTECT, null=True)
     location = models.OneToOneField(Location, on_delete=models.CASCADE, null=True)
     mentee = models.ManyToManyField(User, related_name="classes")
 
