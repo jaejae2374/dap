@@ -11,7 +11,6 @@ from user.core.genre.models import Genre
 from lesson.lesson.models import Lesson
 from datetime import datetime, timedelta
 from user.tests import UserFactory
-import pytz 
 
 User = get_user_model()
 
@@ -84,7 +83,7 @@ class LessonTestCase(TestCase):
         )
         cls.lesson_location_data = {
             'detail': "서울시 강남구 언주로 107",
-            'city': "서울시",
+            'city': "안산시",
             'district': "강남구",
             'description': "테스트 수업 위치입니다."
         }
@@ -94,8 +93,8 @@ class LessonTestCase(TestCase):
         )
         cls.lesson_data = {
             'title': "Test Lesson.",
-            'started_at': "2022-08-17T10:00",
-            'finished_at': "2022-08-17T12:00",
+            'started_at': (datetime.now()+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            'finished_at': (datetime.now()+timedelta(days=1, hours=2)).strftime("%Y-%m-%dT%H:%M"),
             'description': "This is lesson for test.",
             'price': 25000,
             'recruit_number': 25,
@@ -109,6 +108,73 @@ class LessonTestCase(TestCase):
             academy=cls.academy,
             mentor=cls.mentors,
             location=cls.lesson_location
+        )
+
+        # lesson datas for list, search
+        cls.lesson_1 = LessonFactory.create(
+            title="lesson 1",
+            description="test description..1",
+            genre=Genre.objects.get(name="k-pop"),
+            academy=cls.academy,
+            mentor=cls.mentors[:2],
+            started_at=datetime.now()+timedelta(hours=1),
+            finished_at=datetime.now()+timedelta(hours=3),
+            price=30000,
+            recruit_number=20,
+            location=LocationFactory.create(
+                type="lesson",
+                city='서울시',
+                district='관악구'
+            )
+        )
+        cls.lesson_2 = LessonFactory.create(
+            title="lesson 2",
+            description="test description..2",
+            genre=Genre.objects.get(name="hiphop"),
+            mentor=[cls.mentors[2]],
+            started_at=datetime.now()+timedelta(days=1),
+            finished_at=datetime.now()+timedelta(days=1, hours=2),
+            price=20000,
+            recruit_number=5,
+            location=LocationFactory.create(
+                type="lesson",
+                city='서울시',
+                district='강남구'
+            )
+        )
+        cls.lesson_3 = LessonFactory.create(
+            title="lesson 3",
+            description="test description..3",
+            genre=Genre.objects.get(name="hiphop"),
+            academy=cls.academy,
+            mentor=cls.mentors[:2],
+            started_at=datetime.now()+timedelta(days=1, hours=1),
+            finished_at=datetime.now()+timedelta(days=1, hours=3),
+            price=20000,
+            recruit_number=0,
+            location=LocationFactory.create(
+                type="lesson",
+                city='서울시',
+                district='강서구'
+            )
+        )
+        cls.lesson_4 = LessonFactory.create(
+            title="lesson 4",
+            description="test description..4",
+            genre=Genre.objects.get(name="hiphop"),
+            academy=cls.academy,
+            mentor=cls.mentors[:2],
+            started_at=datetime.now()-timedelta(hours=3),
+            finished_at=datetime.now()-timedelta(hours=1),
+        )
+        cls.lesson_5 = LessonFactory.create(
+            title="lesson 5",
+            description="test description..5",
+            genre=Genre.objects.get(name="k-pop"),
+            academy=cls.academy,
+            mentor=cls.mentors[:2],
+            started_at=datetime.now()-timedelta(days=1),
+            finished_at=datetime.now()-timedelta(days=1),
         )
         
     def test_create_lesson(self):
@@ -144,9 +210,9 @@ class LessonTestCase(TestCase):
             data=data, 
             content_type="application/json",
             HTTP_AUTHORIZATION=mentee_token)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         data = response.json()
-        self.assertEqual(data['detail'], "Only mentor can create lesson.")
+        self.assertEqual(data['detail'], "Not allowed.")
 
         # 3. No location field.
         data = self.lesson_data.copy()
@@ -186,7 +252,7 @@ class LessonTestCase(TestCase):
 
         # 6. Started_at field later than finished_at.
         data = self.lesson_data.copy()
-        data['started_at'] = "2022-08-17T12:01"
+        data['started_at'] = (datetime.now()+timedelta(days=1, hours=2, minutes=1)).strftime("%Y-%m-%dT%H:%M")
         response = self.client.post(
             '/lesson/', 
             data=data, 
@@ -345,9 +411,9 @@ class LessonTestCase(TestCase):
             f'/lesson/{lesson.id}/participate/', 
             content_type="application/json",
             HTTP_AUTHORIZATION=self.mentors_tokens[0])
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         data = response.json()
-        self.assertEqual(data['detail'], "Only mentee can participate lesson.")
+        self.assertEqual(data['detail'], "Not allowed.")
 
         # 3. Lesson overcrowded.
         response = self.client.get(
@@ -433,9 +499,9 @@ class LessonTestCase(TestCase):
             f'/lesson/{lesson.id}/cancel/', 
             content_type="application/json",
             HTTP_AUTHORIZATION=self.mentors_tokens[0])
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         data = response.json()
-        self.assertEqual(data['detail'], "Only mentee can cancel lesson.")
+        self.assertEqual(data['detail'], "Not allowed.")
 
         # 3. Not participated.
         response = self.client.put(
@@ -466,3 +532,295 @@ class LessonTestCase(TestCase):
         data = response.json()
         self.assertEqual(data['detail'], "Lesson does not exist.")
 
+    def test_list_lesson(self):
+        """
+        Test List Lesson and Errors.
+        - Cases
+            1. Day search.
+            2. Month search.
+            3. Recruit_number search.
+            4. Max_price search.
+            5. Min_price search.
+            6. Academy search.
+            7. Mentor search.
+            8. District search.
+            9. No genre or city field.
+        """
+        mentor_token = self.mentors_tokens[0]
+        # 1. Day search.
+        params = {
+            'day': (datetime.now() + timedelta(days=1)).day,
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시"
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['id'], self.lesson_2.id)
+        self.assertEqual(data['title'], self.lesson_2.title)
+        self.assertEqual(data['started_at'], self.lesson_2.started_at.strftime("%Y-%m-%dT%H:%M"))
+        self.assertEqual(data['finished_at'], self.lesson_2.finished_at.strftime("%Y-%m-%dT%H:%M"))
+        self.assertEqual(data['genre'], self.lesson_2.genre.name)
+
+        # 2. Month search.
+        params = {
+            'month': datetime.now().month,
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시"
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        datas = response.json()
+        self.assertEqual(len(datas), 2)
+        for data in datas:
+            self.assertIn(data['id'], [self.lesson_2.id, self.lesson_1.id])
+            self.assertIn(data['title'], [self.lesson_2.title, self.lesson_1.title])
+            self.assertIn(data['started_at'], [self.lesson_2.started_at.strftime("%Y-%m-%dT%H:%M"), self.lesson_1.started_at.strftime("%Y-%m-%dT%H:%M")])
+            self.assertIn(data['finished_at'], [self.lesson_2.finished_at.strftime("%Y-%m-%dT%H:%M"), self.lesson_1.finished_at.strftime("%Y-%m-%dT%H:%M")])
+            self.assertIn(data['genre'], [self.lesson_2.genre.name, self.lesson_1.genre.name])
+
+        # 3. Genre search.
+        params = {
+            'genre': self.lesson_2.genre.id,
+            'city': "서울시"
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['id'], self.lesson_2.id)
+        self.assertEqual(data['genre'], self.lesson_2.genre.name)
+
+        # 4. Recruit_number search.
+        params = {
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시",
+            'recruit_number': self.lesson_1.recruit_number
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['id'], self.lesson_1.id)
+        self.assertEqual(data['recruit_number'], self.lesson_1.recruit_number)
+        
+        # 5. Max_price search.
+        params = {
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시",
+            'max_price': self.lesson_2.price
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['id'], self.lesson_2.id)
+        self.assertEqual(data['price'], self.lesson_2.price)
+
+        # 6. Min_price search.
+        params = {
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시",
+            'min_price': self.lesson_1.price
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['id'], self.lesson_1.id)
+        self.assertEqual(data['price'], self.lesson_1.price)
+
+        # 7. Academy search.
+        params = {
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시",
+            'academy': [self.academy.id]
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['id'], self.lesson_1.id)
+        self.assertEqual(data['academy'], self.lesson_1.academy.name)
+
+        # 8. Mentor search.
+        mentors_id = [mentor.id for mentor in self.mentors]
+        mentors_name = [mentor.username for mentor in self.mentors]
+        params = {
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시",
+            'mentor': mentors_id
+        }
+        response = self.client.get(
+            f'/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        datas = response.json()
+        # TODO: 중복 제거
+        self.assertEqual(len(datas), 3)
+        for data in datas:
+            self.assertIn(data['id'], [self.lesson_2.id, self.lesson_1.id])
+            for mentor in data['mentors']:
+                self.assertIn(mentor[0], mentors_id)
+                self.assertIn(mentor[1], mentors_name)
+
+        # 9. District search.
+        params = {
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+            'city': "서울시",
+            'district': ['강남구']
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['id'], self.lesson_2.id)
+
+        # 10. No genre or city field.
+        params = {
+            'genre': [self.lesson_2.genre.id, self.lesson_1.genre.id],
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        data = response.json()
+        self.assertEqual(data['detail'], "genre or city is empty.")
+
+        params = {
+            'city': "서울시",
+        }
+        response = self.client.get(
+            '/lesson/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        data = response.json()
+        self.assertEqual(data['detail'], "genre or city is empty.")
+
+    def test_search_lesson(self):
+        """
+        Test Search Lesson and Errors.
+        - Cases
+            1. Title keyword.
+            2. Description keyword.
+            3. Academy keyword.
+            4. Mentor keyword.
+            5. Include past lessons.
+        """
+        mentor_token = self.mentors_tokens[0]
+        # 1. Title keyword.
+        params = {
+            'keyword': "lesson"
+        }
+        response = self.client.get(
+            '/lesson/search/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        datas = response.json()
+        for data in datas:
+            self.assertIn('lesson', data['title'])
+
+        # 2. Description keyword.
+        params = {
+            'keyword': "description"
+        }
+        response = self.client.get(
+            '/lesson/search/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        datas = response.json()
+        for data in datas:
+            self.assertIn('description', data['description'])
+
+        # 3. Academy keyword.
+        params = {
+            'keyword': "사자"
+        }
+        response = self.client.get(
+            '/lesson/search/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        datas = response.json()
+        for data in datas:
+            self.assertIn('사자', data['academy'])
+
+        # 4. Mentor keyword.
+        params = {
+            'keyword': self.mentors[0].username
+        }
+        response = self.client.get(
+            '/lesson/search/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        datas = response.json()
+        for data in datas:
+            self.assertIn(self.mentors[0].username, [mentor[1] for mentor in data['mentors']])
+
+        # 5. Include past lessons.
+        params = {
+            'keyword': "lesson",
+            'past': True
+        }
+        response = self.client.get(
+            '/lesson/search/', 
+            content_type="application/json",
+            data=params,
+            HTTP_AUTHORIZATION=mentor_token)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        datas = response.json()
+        self.assertIn('lesson 4', [data['title'] for data in datas])
+        self.assertIn('lesson 5', [data['title'] for data in datas])

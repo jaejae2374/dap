@@ -1,8 +1,10 @@
 from django.contrib.auth import login, logout
-from rest_framework import status, permissions, viewsets, generics
+from rest_framework import status, viewsets, generics
 from rest_framework.response import Response
 from user.serializers import UserCreateSerializer, UserLoginSerializer, UserRetrieveSerializer, UserUpdateSerializer, MentorSearchSerializer
 from user.profile.serializers import MentorSerializer, MenteeSerializer
+from user.permissions import IsOwnerOrReadOnly
+from rest_framework.permissions import AllowAny
 from dap.errors import FieldError, NotFound
 from rest_framework.decorators import action
 from user.profile.utils import profile_update
@@ -13,8 +15,6 @@ User = get_user_model()
 
 class UserViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     """User API View."""
-    # TODO: permission details.
-    permission_classes = (permissions.AllowAny,)
     queryset = User.objects.all()
 
     def get_serializer_class(self):
@@ -28,6 +28,14 @@ class UserViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
             return UserUpdateSerializer
         elif self.action == "mentor":
             return MentorSearchSerializer
+
+    def get_permissions(self):
+        # self.check_object_permissions(self.request, user)
+        if self.action in ['create', 'login']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsOwnerOrReadOnly]
+        return [permission() for permission in permission_classes]
 
     @transaction.atomic()
     def create(self, request):

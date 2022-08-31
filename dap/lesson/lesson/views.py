@@ -1,6 +1,8 @@
-from rest_framework import status, viewsets, permissions, generics
+from rest_framework import status, viewsets, generics
 from rest_framework.response import Response
-from dap.errors import NotAllowed, FieldError, NotFound, DuplicationError
+from dap.errors import NotOwner, FieldError, NotFound, DuplicationError
+from lesson.permissions import IsOwnerOrReadOnly
+from user.permissions import IsMentee
 from lesson.lesson.models import Lesson
 from lesson.lesson.serializers import LessonCreateSerializer, LessonRetrieveSerializer, LessonListSerializer, LessonSearchSerializer, LessonUpdateSerializer
 from rest_framework.decorators import action
@@ -10,12 +12,18 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from util.location.utils import set_location
 from django.db import transaction
-import pytz 
-utc=pytz.UTC
+
 
 class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     queryset = Lesson.objects.all()
-    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        # self.check_object_permissions(self.request, user)
+        if self.action in ['participate', 'cancel']:
+            permission_classes = [IsMentee]
+        else:
+            permission_classes = [IsOwnerOrReadOnly]
+        return [permission() for permission in permission_classes]
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -31,9 +39,9 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     
     @transaction.atomic()
     def create(self, request):
-        # TODO: custom permission such as MentorOnly
+        # TODO: 지난 날짜 create 불가
         if not request.user.mentor:
-            raise NotAllowed("Only mentor can create lesson.")
+            raise NotOwner("Not allowed.")
         data = request.data
         serializer = self.get_serializer(
             data=data,
@@ -48,7 +56,6 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
 
     @transaction.atomic()
     def update(self, request, pk=None):
-        # TODO: Only the lesson mentor can update it.
         try:
             data = request.data
             mentors = data.get("mentors")
@@ -73,19 +80,20 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
         return super().retrieve(request, pk)
 
     def delete(self, request, pk=None):
-        # TODO: Only the lesson mentor can update it.
         return super().delete(request, pk)
 
     def list(self, request):
+        # TODO: 이미 지난 day?
+        # TODO: 중복 제거
         page = request.query_params.get('page', '1')
         today = datetime.today()
         month = int(request.query_params.get('month', today.month))
         day = request.query_params.get('day', None)
-        genres = request.query_params.getlist('genres')
+        genres = request.query_params.getlist('genre')
         city = request.query_params.get('city')
 
         if not (genres and city):
-            raise FieldError("genres or city is empty.")
+            raise FieldError("genre or city is empty.")
         if day:
             day=int(day)
             if day == today.day:
@@ -121,12 +129,12 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
             genre__in=genres,
             location__city=city)
 
-        recruit_number = request.query_params.get('recruit_number')
+        recruit_number = request.query_params.get('recruit_number', 1)
         max_price = request.query_params.get('max_price')
         min_price = request.query_params.get('min_price')
-        academies = request.query_params.getlist('academies')
-        mentors = request.query_params.getlist('mentors')
-        districts = request.query_params.getlist('districts')
+        academies = request.query_params.getlist('academy')
+        mentors = request.query_params.getlist('mentor')
+        districts = request.query_params.getlist('district')
         if recruit_number:
             results = results.filter(recruit_number__gte=recruit_number)
         if min_price:
@@ -147,8 +155,6 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     def participate(self, request, pk=None):
         # TODO: 결제 기능 연동
         user = request.user
-        if not user.mentee:
-            raise NotAllowed("Only mentee can participate lesson.")
         now = datetime.now()
         try:
             lesson = Lesson.objects.get(pk=pk)
@@ -192,8 +198,6 @@ class LessonViewSet(viewsets.GenericViewSet, generics.RetrieveDestroyAPIView):
     def cancel(self, request, pk=None):
         std = (datetime.now() + timedelta(minutes=30))
         user = request.user
-        if not user.mentee:
-            raise NotAllowed("Only mentee can cancel lesson.")
         try:
             lesson = Lesson.objects.get(pk=pk)
             if not user.classes.filter(id=pk).exists():

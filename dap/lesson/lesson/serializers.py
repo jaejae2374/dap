@@ -126,6 +126,7 @@ class LessonSearchSerializer(serializers.ModelSerializer):
         fields = (
             'id',
             'title',
+            'description',
             'started_at',
             'finished_at',
             'mentors',

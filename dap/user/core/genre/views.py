@@ -1,13 +1,22 @@
-from rest_framework import status, viewsets, permissions, generics
+from rest_framework import status, viewsets, generics
+from rest_framework.permissions import AllowAny
 from user.core.genre.models import Genre
 from user.core.genre.serializers import GenreSerializer
+from user.permissions import IsAdminUser
 from rest_framework.response import Response
 from django.db import transaction
 
 class GenreViewSet(viewsets.GenericViewSet, generics.RetrieveUpdateDestroyAPIView):
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
-    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        # self.check_object_permissions(self.request, user)
+        if self.action in ['create']:
+            permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [AllowAny]
+        return [permission() for permission in permission_classes]
 
     @transaction.atomic()
     def create(self, request):

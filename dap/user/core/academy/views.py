@@ -1,4 +1,6 @@
-from rest_framework import status, viewsets, permissions
+from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny
+from user.permissions import IsMentor
 from user.core.academy.models import Academy
 from user.core.academy.serializers import AcademySerializer, AcademyListSerializer
 from rest_framework.response import Response
@@ -8,7 +10,15 @@ from django.db import transaction
 class AcademyViewSet(viewsets.GenericViewSet):
     queryset = Academy.objects.all()
     serializer_class = AcademySerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        # self.check_object_permissions(self.request, user)
+        if self.action in ['create']:
+            permission_classes = [IsMentor]
+        else:
+            permission_classes = [AllowAny]
+        return [permission() for permission in permission_classes]
 
     @transaction.atomic()
     def create(self, request):
